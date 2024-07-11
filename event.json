@@ -1,0 +1,51 @@
+{
+  "version": "0",
+  "id": "12345678-1234-1234-1234-123456789012",
+  "detail-type": "Security Hub Findings - Imported",
+  "source": "aws.securityhub",
+  "account": "123456789012",
+  "time": "2020-05-01T00:00:00Z",
+  "region": "us-east-1",
+  "resources": [],
+  "detail": {
+    "findings": [
+      {
+        "SchemaVersion": "2018-10-08",
+        "Id": "example-id-1",
+        "ProductArn": "arn:aws:securityhub:us-east-1::product/aws/securityhub",
+        "GeneratorId": "example-generator",
+        "AwsAccountId": "YOUR_AWS_ACCOUNT_ID",
+        "Types": ["Software and Configuration Checks"],
+        "FirstObservedAt": "2020-05-01T00:00:00Z",
+        "LastObservedAt": "2020-05-01T00:00:00Z",
+        "CreatedAt": "2020-05-01T00:00:00Z",
+        "UpdatedAt": "2020-05-01T00:00:00Z",
+        "Severity": {
+          "Product": 5,
+          "Normalized": 5,
+          "Label": "MEDIUM"
+        },
+        "Title": "Example finding",
+        "Description": "This is an example finding for testing.",
+        "Resources": [
+          {
+            "Type": "AwsEc2Instance",
+            "Id": "i-1234567890abcdef0",
+            "Region": "us-east-1",
+            "Details": {
+              "AwsEc2Instance": {
+                "Type": "t2.micro",
+                "ImageId": "ami-12345678",
+                "IpV4Addresses": ["192.0.2.0"],
+                "IamInstanceProfileArn": "arn:aws:iam::123456789012:instance-profile/ExampleInstanceProfile",
+                "VpcId": "vpc-12345678",
+                "SubnetId": "subnet-12345678",
+                "LaunchedAt": "2020-05-01T00:00:00Z"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

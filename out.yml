@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: An AWS Lambda application that calls the Lambda API.
+Resources:
+  SecurityHubEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: EventBridge rule for Security Hub findings
+      EventPattern:
+        source:
+        - aws.securityhub
+        detail-type:
+        - Security Hub Findings - Imported
+      State: ENABLED
+      Targets:
+      - Arn:
+          Fn::GetAtt:
+          - function
+          - Arn
+        Id: SecurityHubLambdaTarget
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: function
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - SecurityHubEventRule
+        - Arn
+  function:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      Runtime: python3.8
+      CodeUri: s3://test-bedrock-saurabh/e8c503dd19c33fdd38160b6e8e90a83f
+      Description: Demo lambda
+      Timeout: 500
+      MemorySize: 256
+      Policies:
+      - AWSLambdaBasicExecutionRole
+      - AWSLambda_ReadOnlyAccess
+      Tracing: Active
+      Layers:
+      - Ref: libs
+      Environment:
+        Variables:
+          AWS_CLOUDFORMATION_STACK_NAME:
+            Ref: AWS::StackName
+  libs:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: blank-python-lib
+      Description: Dependencies for the blank-python sample app.
+      ContentUri: s3://test-bedrock-saurabh/cbae2b26021503cabbe7d171e5d41522
+      CompatibleRuntimes:
+      - python3.8
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: LambdaExecutionPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: '*'
+      - PolicyName: BedrockInvokeModelPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - bedrock:InvokeModel
+            - bedrock:ListFoundationModels
+            Resource:
+            - arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the Lambda Function
+    Value:
+      Fn::GetAtt:
+      - function
+      - Arn
+  SecurityHubEventRuleArn:
+    Description: ARN of the EventBridge rule
+    Value:
+      Fn::GetAtt:
+      - SecurityHubEventRule
+      - Arn
