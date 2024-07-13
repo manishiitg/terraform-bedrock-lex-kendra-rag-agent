@@ -4,11 +4,6 @@ import logging
 import boto3
 import jsonpickle
 import json
-from io import BytesIO
-from docx import Document
-from docx.shared import Inches
-import markdown
-from bs4 import BeautifulSoup
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -130,36 +125,6 @@ def fetch_security_hub_findings():
     return formatted_findings
 
 
-def markdown_to_docx(markdown_text):
-    # Convert markdown to HTML
-    html = markdown.markdown(markdown_text)
-
-    # Parse HTML
-    soup = BeautifulSoup(html, 'html.parser')
-
-    # Create a new Word document
-    doc = Document()
-
-    # Iterate through HTML elements and add them to the Word document
-    for element in soup.find_all():
-        if element.name == 'h1':
-            doc.add_heading(element.text, level=1)
-        elif element.name == 'h2':
-            doc.add_heading(element.text, level=2)
-        elif element.name == 'h3':
-            doc.add_heading(element.text, level=3)
-        elif element.name == 'p':
-            doc.add_paragraph(element.text)
-        elif element.name == 'ul':
-            for li in element.find_all('li'):
-                doc.add_paragraph(li.text, style='List Bullet')
-        elif element.name == 'ol':
-            for li in element.find_all('li'):
-                doc.add_paragraph(li.text, style='List Number')
-
-    return doc
-
-
 def analyze_finding(kendra_id, event):
     user = f"""I want to search aws opensearch for related documents
     I want you to review findings from security hub and extract important keywords create a search summary
@@ -236,19 +201,15 @@ def lambda_handler(event, context):
             response = analyze_finding(kendra_id, row)
             res.append({"doc": row, "response": response[0], "search_query": response[1], "kendra_docs": response[2]})
             # Generate Word document
-            doc = markdown_to_docx(response[0])
-
-            # Save document to BytesIO object
-            doc_buffer = BytesIO()
-            doc.save(doc_buffer)
-            doc_buffer.seek(0)
+            
 
             # Upload to S3
             s3 = boto3.client('s3')
             bucket_name = 'test-stack-saurabh'  # Replace with your S3 bucket name
             id = row['Id'].split("/")[-1]
-            file_name = f'incident_report_{id}.docx'
-            s3.upload_fileobj(doc_buffer, bucket_name, file_name)
+            file_name = f'incident_report_{id}.md'
+            # s3.upload_fileobj(doc_buffer, bucket_name, file_name)
+            s3.put_object(Bucket=bucket_name, Key=file_name, Body=response[0])
 
             logger.info(f'Uploaded {file_name} to S3 bucket {bucket_name}')
     else:
