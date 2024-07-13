@@ -14,4 +14,4 @@ terraform init
 
 terraform apply
 
-sh 4-invoke.sh
+sh 4-invoketf.sh
