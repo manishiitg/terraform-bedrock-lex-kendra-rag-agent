@@ -15,3 +15,6 @@ terraform init
 terraform apply
 
 sh 4-invoketf.sh
+
+
+to increase no of issues it picks from security hub can change variable     max_finding = 2  in function/lambda_function.py
