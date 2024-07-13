@@ -1,50 +1,70 @@
 {
   "version": "0",
-  "id": "12345678-1234-1234-1234-123456789012",
+  "id": "89c7e4c0-2ad8-4c99-b5d5-0d7a1c4862bb",
   "detail-type": "Security Hub Findings - Imported",
   "source": "aws.securityhub",
   "account": "123456789012",
-  "time": "2020-05-01T00:00:00Z",
+  "time": "2023-06-15T14:22:33Z",
   "region": "us-east-1",
-  "resources": [],
+  "resources": [
+    "arn:aws:s3:::my-sensitive-data-bucket"
+  ],
   "detail": {
     "findings": [
       {
         "SchemaVersion": "2018-10-08",
-        "Id": "example-id-1",
+        "Id": "arn:aws:securityhub:us-east-1:123456789012:subscription/aws-foundational-security-best-practices/v/1.0.0/S3.8/finding/8a7b5a1b-3bcd-4792-9d81-ff2b218a9450",
         "ProductArn": "arn:aws:securityhub:us-east-1::product/aws/securityhub",
-        "GeneratorId": "example-generator",
-        "AwsAccountId": "YOUR_AWS_ACCOUNT_ID",
-        "Types": ["Software and Configuration Checks"],
-        "FirstObservedAt": "2020-05-01T00:00:00Z",
-        "LastObservedAt": "2020-05-01T00:00:00Z",
-        "CreatedAt": "2020-05-01T00:00:00Z",
-        "UpdatedAt": "2020-05-01T00:00:00Z",
+        "GeneratorId": "aws-foundational-security-best-practices/v/1.0.0/S3.8",
+        "AwsAccountId": "local-test",
+        "Types": [
+          "Software and Configuration Checks/Industry and Regulatory Standards/AWS-Foundational-Security-Best-Practices"
+        ],
+        "FirstObservedAt": "2023-06-15T14:20:11Z",
+        "LastObservedAt": "2023-06-15T14:22:33Z",
+        "CreatedAt": "2023-06-15T14:20:11Z",
+        "UpdatedAt": "2023-06-15T14:22:33Z",
         "Severity": {
-          "Product": 5,
-          "Normalized": 5,
-          "Label": "MEDIUM"
+          "Product": 70,
+          "Label": "HIGH",
+          "Normalized": 70
         },
-        "Title": "Example finding",
-        "Description": "This is an example finding for testing.",
+        "Title": "S3.8 S3 buckets should have server-side encryption enabled",
+        "Description": "This AWS control checks that your Amazon S3 bucket either has Amazon S3 default encryption enabled or that the S3 bucket policy explicitly denies put-object requests without server-side encryption.",
+        "Remediation": {
+          "Recommendation": {
+            "Text": "For information on how to correct this issue, consult the AWS Security Hub controls documentation.",
+            "Url": "https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-fsbp-controls.html#fsbp-s3-8"
+          }
+        },
+        "ProductFields": {
+          "ProductName": "SecurityHub",
+          "aws/securityhub/FindingId": "arn:aws:securityhub:us-east-1:123456789012:subscription/aws-foundational-security-best-practices/v/1.0.0/S3.8/finding/8a7b5a1b-3bcd-4792-9d81-ff2b218a9450",
+          "aws/securityhub/ProductName": "Security Hub",
+          "aws/securityhub/CompanyName": "AWS"
+        },
         "Resources": [
           {
-            "Type": "AwsEc2Instance",
-            "Id": "i-1234567890abcdef0",
+            "Type": "AwsS3Bucket",
+            "Id": "arn:aws:s3:::my-sensitive-data-bucket",
+            "Partition": "aws",
             "Region": "us-east-1",
             "Details": {
-              "AwsEc2Instance": {
-                "Type": "t2.micro",
-                "ImageId": "ami-12345678",
-                "IpV4Addresses": ["192.0.2.0"],
-                "IamInstanceProfileArn": "arn:aws:iam::123456789012:instance-profile/ExampleInstanceProfile",
-                "VpcId": "vpc-12345678",
-                "SubnetId": "subnet-12345678",
-                "LaunchedAt": "2020-05-01T00:00:00Z"
+              "AwsS3Bucket": {
+                "OwnerId": "a1b2c3d4e5f6g7h8i9j0",
+                "CreatedAt": "2023-01-15T09:12:45Z"
               }
             }
           }
-        ]
+        ],
+        "Compliance": {
+          "Status": "FAILED"
+        },
+        "WorkflowState": "NEW",
+        "Workflow": {
+          "Status": "NEW"
+        },
+        "RecordState": "ACTIVE"
       }
     ]
   }

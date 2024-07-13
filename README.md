@@ -1,3 +1,5 @@
+export AWS_DEFAULT_PROFILE=sydney
+
 Terrafrom code to connect aws security hub with aws event bridget and trigger lambda.
 
 

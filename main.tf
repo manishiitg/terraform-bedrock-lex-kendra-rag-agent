@@ -36,7 +36,7 @@ resource "aws_lambda_function" "function" {
   role             = aws_iam_role.lambda_execution_role.arn
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
-  timeout          = 500
+  timeout          = 900
   memory_size      = 256
   description      = "Demo lambda"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
@@ -51,21 +51,22 @@ resource "aws_lambda_function" "function" {
 # Archive file for Lambda Layer
 data "archive_file" "layer_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/function/package"
-  output_path = "${path.module}/function/package/layer.zip"
+  source_dir  = "${path.module}/layer/python/"
+  output_path = "${path.module}/layer/layer.zip"
 }
 
 # Lambda Layer
 resource "aws_lambda_layer_version" "libs" {
-  filename            = "function/package/layer.zip"  # Ensure you zip your layer content
+  filename            = "layer/layer.zip"  # Ensure you zip your layer content
   layer_name          = "blank-python-lib"
   compatible_runtimes = ["python3.8"]
   description         = "Dependencies for the blank-python sample app."
 }
+
 # IAM role for Lambda
 resource "aws_iam_role" "lambda_execution_role" {
   name = "lambda_execution_role"
-
+  
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -80,9 +81,49 @@ resource "aws_iam_role" "lambda_execution_role" {
   })
 }
 
-# IAM policy for Lambda execution
-resource "aws_iam_role_policy" "lambda_execution_policy" {
-  name = "lambda_execution_policy"
+# Attach AWSLambdaBasicExecutionRole managed policy
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Bedrock Access Policy
+resource "aws_iam_role_policy" "bedrock_access_policy" {
+  name = "BedrockAccess"
+  role = aws_iam_role.lambda_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock:*"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Kendra Access Policy
+resource "aws_iam_role_policy" "kendra_access_policy" {
+  name = "KendraAccess"
+  role = aws_iam_role.lambda_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["kendra:*"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# S3 Access Policy
+resource "aws_iam_role_policy" "s3_access_policy" {
+  name = "S3Access"
   role = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -91,19 +132,22 @@ resource "aws_iam_role_policy" "lambda_execution_policy" {
       {
         Effect = "Allow"
         Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket"
         ]
-        Resource = "arn:aws:logs:*:*:*"
+        Resource = [
+          "arn:aws:s3:::*",
+          "arn:aws:s3:::*/*"
+        ]
       }
     ]
   })
 }
 
-# IAM policy for Bedrock access
-resource "aws_iam_role_policy" "bedrock_invoke_model_policy" {
-  name = "bedrock_invoke_model_policy"
+# SecurityHub Access Policy
+resource "aws_iam_role_policy" "securityhub_access_policy" {
+  name = "SecurityHubAccess"
   role = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -112,14 +156,112 @@ resource "aws_iam_role_policy" "bedrock_invoke_model_policy" {
       {
         Effect = "Allow"
         Action = [
-          "bedrock:InvokeModel",
-          "bedrock:ListFoundationModels"
+          "securityhub:GetFindings",
+          "securityhub:BatchGetFindings",
+          "securityhub:DescribeHub"
         ]
-        Resource = "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0"
+        Resource = "*"
       }
     ]
   })
 }
+
+# Add this after the existing provider block
+
+# S3 bucket for Kendra datasource
+resource "aws_s3_bucket" "kendra_datasource" {
+  bucket = "security-demo-bucket-saurabh"
+}
+
+# Upload the PDF file to S3
+resource "aws_s3_object" "security_controls_pdf" {
+  bucket = aws_s3_bucket.kendra_datasource.id
+  key    = "aws-security-controls.pdf"
+  # source = "https://docs.aws.amazon.com/pdfs/prescriptive-guidance/latest/aws-security-controls/aws-security-controls.pdf"
+  source = "${path.module}/aws-security-controls.pdf"
+}
+
+# Kendra Index
+resource "aws_kendra_index" "example" {
+  name        = "example-index"
+  description = "Example Kendra index"
+  role_arn    = aws_iam_role.kendra_role.arn
+  edition = "DEVELOPER_EDITION" # or "ENTERPRISE_EDITION" based on your needs
+}
+
+# Kendra S3 Data Source
+resource "aws_kendra_data_source" "example" {
+  index_id = aws_kendra_index.example.id
+  name     = "example-s3-data-source"
+  type     = "S3"
+  role_arn = aws_iam_role.kendra_role.arn
+
+  configuration {
+    s3_configuration {
+      bucket_name = aws_s3_bucket.kendra_datasource.id
+    }
+  }
+}
+
+# IAM role for Kendra
+resource "aws_iam_role" "kendra_role" {
+  name = "kendra_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "kendra.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# IAM policy for Kendra
+resource "aws_iam_role_policy" "kendra_policy" {
+  name = "kendra_policy"
+  role = aws_iam_role.kendra_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.kendra_datasource.arn,
+          "${aws_s3_bucket.kendra_datasource.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kendra:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Add these to the existing outputs
+output "kendra_index_id" {
+  description = "ID of the Kendra Index"
+  value       = aws_kendra_index.example.id
+}
+
+output "kendra_datasource_id" {
+  description = "ID of the Kendra Data Source"
+  value       = aws_kendra_data_source.example.id
+}
+
 
 # Outputs
 output "lambda_function_arn" {
