@@ -32,7 +32,7 @@ data "archive_file" "layer_zip" {
 
 # Lambda Layer
 resource "aws_lambda_layer_version" "libs" {
-  filename            = "layer/layer.zip"  # Ensure you zip your layer content
+  filename            = "layer/layer.zip" # Ensure you zip your layer content
   layer_name          = "blank-python-lib"
   compatible_runtimes = ["python3.8"]
   description         = "Dependencies for the blank-python sample app1"
@@ -51,8 +51,8 @@ resource "aws_lambda_function" "bedrock_lex_lambda" {
 
   environment {
     variables = {
-      KENDRA_INDEX_ID               = aws_kendra_index.kendra_index.id
-      KENDRA_INDEX_NAME             = "${aws_kendra_index.kendra_index.name}-index"
+      KENDRA_INDEX_ID   = aws_kendra_index.kendra_index.id
+      KENDRA_INDEX_NAME = "${aws_kendra_index.kendra_index.name}-index"
     }
   }
 
@@ -138,6 +138,57 @@ resource "aws_iam_role_policy" "s3_access" {
 resource "aws_s3_bucket" "s3_bucket" {
   bucket = var.bucket_name
 }
+
+
+# Create the AWS Bedrock Guardrail resource
+resource "awscc_bedrock_guardrail" "pii_masking_guardrail" {
+  name                      = "PII-Masking-Guardrail"
+  blocked_input_messaging   = "Blocked input"
+  blocked_outputs_messaging = "Blocked output"
+  description               = "Guardrail to mask sensitive and PII information in AWS Bedrock"
+
+  sensitive_information_policy_config = {
+
+#     ["ADDRESS" "AGE" "AWS_ACCESS_KEY" "AWS_SECRET_KEY"
+# │ "CA_HEALTH_NUMBER" "CA_SOCIAL_INSURANCE_NUMBER" "CREDIT_DEBIT_CARD_CVV" "CREDIT_DEBIT_CARD_EXPIRY" "CREDIT_DEBIT_CARD_NUMBER" "DRIVER_ID" "EMAIL"
+# │ "INTERNATIONAL_BANK_ACCOUNT_NUMBER" "IP_ADDRESS" "LICENSE_PLATE" "MAC_ADDRESS" "NAME" "PASSWORD" "PHONE" "PIN" "SWIFT_CODE"
+# │ "UK_NATIONAL_HEALTH_SERVICE_NUMBER" "UK_NATIONAL_INSURANCE_NUMBER" "UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER" "URL" "USERNAME" "US_BANK_ACCOUNT_NUMBER"
+# │ "US_BANK_ROUTING_NUMBER" "US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER" "US_PASSPORT_NUMBER" "US_SOCIAL_SECURITY_NUMBER" "VEHICLE_IDENTIFICATION_NUMBER"],
+
+    pii_entities_config = [
+      { action = "BLOCK", type = "NAME" },
+      { action = "BLOCK", type = "DRIVER_ID" },
+      { action = "ANONYMIZE", type = "USERNAME" },
+      { action = "ANONYMIZE", type = "EMAIL" },
+      { action = "ANONYMIZE", type = "PHONE" },
+      { action = "BLOCK", type = "US_SOCIAL_SECURITY_NUMBER" },
+      { action = "ANONYMIZE", type = "CREDIT_DEBIT_CARD_NUMBER" },
+      { action = "ANONYMIZE", type = "ADDRESS" },
+      { action = "ANONYMIZE", type = "IP_ADDRESS" },
+      { action = "ANONYMIZE", type = "AGE" },
+      { action = "BLOCK", type = "AWS_ACCESS_KEY" },
+      { action = "BLOCK", type = "AWS_SECRET_KEY" },
+    ]
+    regexes_config = [
+      {
+        action      = "BLOCK"
+        description = "Block SSN-like patterns"
+        name        = "ssn_pattern"
+        pattern     = "^\\d{3}-\\d{2}-\\d{4}$"
+      },
+      {
+        action      = "ANONYMIZE"
+        description = "Mask custom employee ID format"
+        name        = "employee_id_pattern"
+        pattern     = "EMP-\\d{6}"
+      }
+    ]
+
+  }
+}
+
+
+
 
 resource "aws_iam_role" "kendra_index_role" {
   name = "KendraIndexRole"
@@ -315,7 +366,7 @@ resource "aws_lambda_permission" "allow_lex" {
 }
 
 resource "aws_lexv2models_bot" "chatbot" {
-  name = "LLMChatbot"
+  name     = "LLMChatbot"
   role_arn = aws_iam_role.bot_runtime_role.arn
 
   data_privacy {
@@ -334,28 +385,28 @@ resource "null_resource" "wait_for_bot" {
   provisioner "local-exec" {
     command = <<EOF
       echo "Starting bot status check..."
-      
+
       check_bot_status() {
         aws lexv2-models describe-bot --bot-id ${aws_lexv2models_bot.chatbot.id} --region us-west-2 --query 'botStatus' --output text
       }
-      
+
       bot_status=$(check_bot_status)
       echo "Initial bot status: $bot_status"
-      
+
       while [ "$bot_status" != "Available" ]; do
         echo "Waiting for bot to be Available... Current status: $bot_status"
         sleep 10
         bot_status=$(check_bot_status)
       done
-      
+
       echo "Bot is Available. Checking for Versioning state..."
-      
+
       while [ "$bot_status" = "Versioning" ]; do
         echo "Bot is in Versioning state. Waiting..."
         sleep 10
         bot_status=$(check_bot_status)
       done
-      
+
       echo "Final bot status: $bot_status"
       echo "Bot check complete. Proceeding with next steps."
     EOF
@@ -364,10 +415,10 @@ resource "null_resource" "wait_for_bot" {
 
 
 resource "aws_lexv2models_bot_locale" "chatbot_locale" {
-  bot_id = aws_lexv2models_bot.chatbot.id
+  bot_id                           = aws_lexv2models_bot.chatbot.id
   bot_version                      = "DRAFT"
   locale_id                        = "en_US"
-  description = "LLM Bedrock Bot"
+  description                      = "LLM Bedrock Bot"
   n_lu_intent_confidence_threshold = 0.70
 
   voice_settings {
@@ -389,50 +440,12 @@ resource "aws_lexv2models_bot_version" "chatbot_version" {
   }
 }
 
-# resource "aws_lexv2_bot_alias" "chatbot_alias" {
-#   bot_alias_name = "ChatbotAlias"
-#   bot_id = aws_lexv2_bot.chatbot.id
-#   description = "Chatbot Alias"
-
-#   sentiment_analysis_settings {
-#     detect_sentiment = false
-#   }
-# }
-# resource "aws_lexv2models_intent" "fallback_intent" {
-#   name = "FallbackIntent"
-#   locale_id   = aws_lexv2models_bot_locale.chatbot_locale.locale_id
-#   bot_id = aws_lexv2models_bot.chatbot.id
-#   bot_version = "DRAFT"
-#   description = "Invoke Lambda when FallbackIntent gets hit"
-#   parent_intent_signature = "AMAZON.FallbackIntent"
-
-#   fulfillment_code_hook {
-#     enabled = true
-#   }
-#   lifecycle {
-#     ignore_changes = [name]
-#   }
-# }
-
-# resource "aws_lexv2models_intent" "custom_fallback_intent" {
-#   name = "CustomFallbackIntent"
-#   locale_id = aws_lexv2models_bot_locale.chatbot_locale.locale_id
-#   bot_id = aws_lexv2models_bot.chatbot.id
-#   bot_version = "DRAFT"
-#   description = "Custom fallback intent"
-  
-#   fulfillment_code_hook {
-#     enabled = true
-#   }
-
-# }
-
 
 resource "aws_lexv2models_intent" "chatbot" {
-  bot_id = aws_lexv2models_bot.chatbot.id
+  bot_id      = aws_lexv2models_bot.chatbot.id
   bot_version = aws_lexv2models_bot_locale.chatbot_locale.bot_version
-  locale_id = aws_lexv2models_bot_locale.chatbot_locale.locale_id
-  name = "HelloIntent"
+  locale_id   = aws_lexv2models_bot_locale.chatbot_locale.locale_id
+  name        = "HelloIntent"
 
   dialog_code_hook {
     enabled = true
@@ -448,7 +461,7 @@ resource "null_resource" "my_bot_build" {
   depends_on = [aws_lexv2models_intent.chatbot]
 
   triggers = {
-    bot_id = aws_lexv2models_bot.chatbot.id
+    bot_id    = aws_lexv2models_bot.chatbot.id
     locale_id = aws_lexv2models_bot_locale.chatbot_locale.locale_id
     # intent = aws_lexv2models_intent.chatbot.sample_utterance
   }
@@ -475,11 +488,11 @@ resource "null_resource" "my_bot_alias" {
   depends_on = [aws_lexv2models_bot_version.chatbot]
 
   triggers = {
-    bot_id = aws_lexv2models_bot.chatbot.id
-    locale_id = aws_lexv2models_bot_locale.chatbot_locale.locale_id
+    bot_id         = aws_lexv2models_bot.chatbot.id
+    locale_id      = aws_lexv2models_bot_locale.chatbot_locale.locale_id
     latest_version = aws_lexv2models_bot_version.chatbot.bot_version
-    lambda_arn = aws_lambda_function.bedrock_lex_lambda.arn
-    logs_arn = ""
+    lambda_arn     = aws_lambda_function.bedrock_lex_lambda.arn
+    logs_arn       = ""
   }
 
   provisioner "local-exec" {
@@ -497,28 +510,28 @@ resource "null_resource" "my_bot_alias" {
 #   provisioner "local-exec" {
 #     command = <<EOF
 #       echo "Starting bot status check..."
-      
+
 #       check_bot_status() {
 #         aws lexv2-models describe-bot --bot-id ${aws_lexv2models_bot.chatbot.id} --region us-west-2 --query 'botStatus' --output text
 #       }
-      
+
 #       bot_status=$(check_bot_status)
 #       echo "Initial bot status: $bot_status"
-      
+
 #       while [ "$bot_status" != "Available" ]; do
 #         echo "Waiting for bot to be Available... Current status: $bot_status"
 #         sleep 10
 #         bot_status=$(check_bot_status)
 #       done
-      
+
 #       echo "Bot is Available. Checking for Versioning state..."
-      
+
 #       while [ "$bot_status" = "Versioning" ]; do
 #         echo "Bot is in Versioning state. Waiting..."
 #         sleep 10
 #         bot_status=$(check_bot_status)
 #       done
-      
+
 #       echo "Final bot status: $bot_status"
 #       echo "Bot check complete. Proceeding with next steps."
 
@@ -541,20 +554,20 @@ resource "null_resource" "my_bot_alias" {
 #     aws lexv2-models update-bot-alias --bot-id ${aws_lexv2models_bot.chatbot.id} --bot-alias-id $CURRENT_ALIAS_ID --bot-alias-name $ALIAS_NAME --bot-version 1 --bot-alias-locale-settings '{"'$2'":{"enabled":true,"codeHookSpecification":{"lambdaCodeHook":{"lambdaARN":"'${bedrock_lex_lambda.lambda.arn}'","codeHookInterfaceVersion":"1.0"}}}}' --conversation-log-settings '{"textLogSettings":[{"enabled":true,"destination":{"cloudWatch":{"cloudWatchLogGroupArn":"'$5'","logPrefix":""}}}]}'
 
 #       echo "Fetching FallbackIntentId... ${aws_lexv2models_bot.chatbot.id}"
-      
+
 #       FallbackIntentId=$(aws lexv2-models list-intents --bot-id ${aws_lexv2models_bot.chatbot.id} --bot-version DRAFT --locale-id en_US --query "intentSummaries[?intentName=='CustomFallbackIntent'].intentId" --output text)
-      
+
 #       echo "Raw FallbackIntentId output: $FallbackIntentId"
-      
+
 #       if [ -z "$FallbackIntentId" ]; then
 #         echo "FallbackIntentId is null. Exiting."
 #         exit 1
 #       else
 #         echo "Fetched FallbackIntentId: $FallbackIntentId"
 #       fi
-      
+
 #       echo "Updating FallbackIntent with ID: $FallbackIntentId..."
-      
+
 #       aws lexv2-models update-intent \
 #         --bot-id ${aws_lexv2models_bot.chatbot.id} \
 #         --bot-version DRAFT \
@@ -562,10 +575,33 @@ resource "null_resource" "my_bot_alias" {
 #         --intent-id $FallbackIntentId \
 #         --intent-name FallbackIntent \
 #         --fulfillment-code-hook '{"enabled": true}'
-      
+
 #       echo "Update completed."
 #     EOF
 #   }
+# }
+
+# resource "awscc_bedrock_guardrail" "example" {
+#   name                      = "example_guardrail"
+#   blocked_input_messaging   = "Sorry cannot answer this question"
+#   blocked_outputs_messaging = "Blocked output"
+#   description               = "Example guardrail"
+
+#   content_policy_config = {
+#     filters_config = [
+#       {
+#         input_strength  = "MEDIUM"
+#         output_strength = "MEDIUM"
+#         type            = "HATE"
+#       },
+#       {
+#         input_strength  = "HIGH"
+#         output_strength = "HIGH"
+#         type            = "VIOLENCE"
+#       }
+#     ]
+#   }
+
 # }
 
 
@@ -585,7 +621,7 @@ output "kendra_data_source_id" {
 }
 output "lex_bot_id" {
   description = "The ID of the Lex bot"
-  value = aws_lexv2models_bot.chatbot.id
+  value       = aws_lexv2models_bot.chatbot.id
 }
 
 
