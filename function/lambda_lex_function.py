@@ -91,33 +91,43 @@ def query_kendra(kendra_id, query):
 
 def process_prompt(system, prompt):
 
-    body = json.dumps({
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 9186,
-        "system": system,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ]
-            }
-        ]
-    })
+    # body = json.dumps({
+    #     "anthropic_version": "bedrock-2023-05-31",
+    #     "max_tokens": 9186,
+    #     "system": system,
+    #     "messages": [
+    #         {
+    #             "role": "user",
+    #             "content": [
+    #                 {
+    #                     "type": "text",
+    #                     "text": prompt
+    #                 }
+    #             ]
+    #         }
+    #     ]
+    # })
 
-    response = bedrock_runtime.invoke_model(
-        modelId="anthropic.claude-3-haiku-20240307-v1:0",  # ,"anthropic.claude-3-sonnet-20240229-v1:0",
-        contentType="application/json",
-        accept="application/json",
-        body=body
-    )
+    print(f"prompt {prompt}")
+    body = json.dumps({"inputText": system + "\n" + prompt, "textGenerationConfig": {"maxTokenCount": 4096, "stopSequences": [], "temperature": 0, "topP": 1}})
 
-    response_body = json.loads(response['body'].read())
-    logger.info(f"respone body from api {response_body}")
-    return response_body['content'][0]['text']
+    try:
+        response = bedrock_runtime.invoke_model(
+            modelId="amazon.titan-text-lite-v1",
+            # modelId="anthropic.claude-3-haiku-20240307-v1:0",  # ,"anthropic.claude-3-sonnet-20240229-v1:0",
+            contentType="application/json",
+            accept="application/json",
+            body=body
+
+        )
+
+        response_body = json.loads(response['body'].read())
+        logger.info(f"respone body from api {response_body}")
+        # return response_body['content'][0]['text']
+        return response_body["results"][0]['outputText']
+    except Exception as e:
+        print(f"Error invoking model: {str(e)}")
+        raise e
 
 
 def do_qa_with_context(context, query):

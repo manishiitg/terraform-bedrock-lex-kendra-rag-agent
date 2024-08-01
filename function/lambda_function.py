@@ -71,7 +71,8 @@ def process_prompt(system, prompt):
     })
 
     response = bedrock_runtime.invoke_model(
-        modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+        # modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+        modelId="amazon.titan-embed-text-v1",
         contentType="application/json",
         accept="application/json",
         body=body
