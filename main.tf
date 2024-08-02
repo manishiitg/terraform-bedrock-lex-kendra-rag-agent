@@ -17,6 +17,19 @@ variable "bucket_name" {
   default     = "my-llm-pdf-bucket-12344"
 }
 
+variable "project_name" {
+  description = "The name of the project"
+  type        = string
+  default     = "compliance-check"
+}
+
+variable "environment" {
+  description = "The deployment environment"
+  type        = string
+  default     = "prod"
+}
+
+
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/function"
@@ -58,6 +71,30 @@ resource "aws_lambda_function" "bedrock_lex_lambda" {
 
   layers = [aws_lambda_layer_version.libs.arn]
 }
+
+resource "aws_lambda_function" "bedrock_aws_config_lambda" {
+  filename         = data.archive_file.lambda_zip.output_path
+  function_name    = "BedRockAwsConfigLambda"
+  role             = aws_iam_role.bedrock_lambda_execution_role.arn
+  handler          = "lambda_aws_config_function.lambda_handler"
+  runtime          = "python3.8"
+  timeout          = 500
+  memory_size      = 256
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      KENDRA_INDEX_ID     = aws_kendra_index.kendra_index.id
+      KENDRA_INDEX_NAME   = "${aws_kendra_index.kendra_index.name}-index"
+      EMAIL_FROM    = "saurabh@gmail.com"
+      EMAIL_TO      = "saurabh.excel2011@gmail.com"
+      EMAIL_SUBJECT = "AWS Config Compliance Change Notification"
+    }
+  }
+
+  layers = [aws_lambda_layer_version.libs.arn]
+}
+
 resource "aws_iam_role" "bedrock_lambda_execution_role" {
   name = "BedRockLambdaExecutionRole"
 
@@ -70,6 +107,25 @@ resource "aws_iam_role" "bedrock_lambda_execution_role" {
         Principal = {
           Service = "lambda.amazonaws.com"
         }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_ses_policy" {
+  name = "lambda_ses_policy"
+  role = aws_iam_role.bedrock_lambda_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -95,6 +151,77 @@ resource "aws_iam_role_policy" "bedrock_access" {
     ]
   })
 }
+
+
+
+
+# EventBridge rule
+resource "aws_cloudwatch_event_rule" "compliance_check_rule" {
+  name        = "${var.project_name}-${var.environment}-rule"
+  description = "Rule to trigger the Lambda function for compliance checks"
+
+  event_pattern = jsonencode({
+    source      = ["aws.config"]
+    detail-type = ["Config Rules Compliance Change"]
+    detail = {
+      complianceType = ["NON_COMPLIANT"]
+    }
+  })
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-rule"
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
+# EventBridge target (Lambda function)
+resource "aws_cloudwatch_event_target" "lambda_target" {
+  rule      = aws_cloudwatch_event_rule.compliance_check_rule.name
+  target_id = "${var.project_name}-${var.environment}-lambda-target"
+  arn       = aws_lambda_function.bedrock_aws_config_lambda.arn
+
+  input_transformer {
+    input_paths = {
+      detail     = "$.detail"
+      detailType = "$.detail-type"
+      source     = "$.source"
+      time       = "$.time"
+      id         = "$.id"
+      region     = "$.region"
+      resources  = "$.resources"
+      accountId  = "$.account"
+    }
+    input_template = <<EOF
+{
+  "action": "CheckCompliance",
+  "event": {
+    "id": <id>,
+    "detail-type": <detailType>,
+    "source": <source>,
+    "account": <accountId>,
+    "time": <time>,
+    "region": <region>,
+    "resources": <resources>,
+    "detail": <detail>
+  }
+}
+EOF
+  }
+}
+
+# Lambda permission to allow EventBridge to invoke the function
+resource "aws_lambda_permission" "allow_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.bedrock_aws_config_lambda.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.compliance_check_rule.arn
+}
+
+
+
 
 resource "aws_iam_role_policy" "kendra_access" {
   name = "KendraAccess"
@@ -149,17 +276,17 @@ resource "awscc_bedrock_guardrail" "pii_masking_guardrail" {
 
   sensitive_information_policy_config = {
 
-#     ["ADDRESS" "AGE" "AWS_ACCESS_KEY" "AWS_SECRET_KEY"
-# │ "CA_HEALTH_NUMBER" "CA_SOCIAL_INSURANCE_NUMBER" "CREDIT_DEBIT_CARD_CVV" "CREDIT_DEBIT_CARD_EXPIRY" "CREDIT_DEBIT_CARD_NUMBER" "DRIVER_ID" "EMAIL"
-# │ "INTERNATIONAL_BANK_ACCOUNT_NUMBER" "IP_ADDRESS" "LICENSE_PLATE" "MAC_ADDRESS" "NAME" "PASSWORD" "PHONE" "PIN" "SWIFT_CODE"
-# │ "UK_NATIONAL_HEALTH_SERVICE_NUMBER" "UK_NATIONAL_INSURANCE_NUMBER" "UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER" "URL" "USERNAME" "US_BANK_ACCOUNT_NUMBER"
-# │ "US_BANK_ROUTING_NUMBER" "US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER" "US_PASSPORT_NUMBER" "US_SOCIAL_SECURITY_NUMBER" "VEHICLE_IDENTIFICATION_NUMBER"],
+    #     ["ADDRESS" "AGE" "AWS_ACCESS_KEY" "AWS_SECRET_KEY"
+    # │ "CA_HEALTH_NUMBER" "CA_SOCIAL_INSURANCE_NUMBER" "CREDIT_DEBIT_CARD_CVV" "CREDIT_DEBIT_CARD_EXPIRY" "CREDIT_DEBIT_CARD_NUMBER" "DRIVER_ID" "EMAIL"
+    # │ "INTERNATIONAL_BANK_ACCOUNT_NUMBER" "IP_ADDRESS" "LICENSE_PLATE" "MAC_ADDRESS" "NAME" "PASSWORD" "PHONE" "PIN" "SWIFT_CODE"
+    # │ "UK_NATIONAL_HEALTH_SERVICE_NUMBER" "UK_NATIONAL_INSURANCE_NUMBER" "UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER" "URL" "USERNAME" "US_BANK_ACCOUNT_NUMBER"
+    # │ "US_BANK_ROUTING_NUMBER" "US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER" "US_PASSPORT_NUMBER" "US_SOCIAL_SECURITY_NUMBER" "VEHICLE_IDENTIFICATION_NUMBER"],
 
     pii_entities_config = [
-      { action = "BLOCK", type = "NAME" },
+      { action = "ANONYMIZE", type = "NAME" },
       { action = "BLOCK", type = "DRIVER_ID" },
       { action = "ANONYMIZE", type = "USERNAME" },
-      { action = "ANONYMIZE", type = "EMAIL" },
+      # { action = "ANONYMIZE", type = "EMAIL" },
       { action = "ANONYMIZE", type = "PHONE" },
       { action = "BLOCK", type = "US_SOCIAL_SECURITY_NUMBER" },
       { action = "ANONYMIZE", type = "CREDIT_DEBIT_CARD_NUMBER" },
@@ -624,5 +751,13 @@ output "lex_bot_id" {
   value       = aws_lexv2models_bot.chatbot.id
 }
 
+# Outputs
+output "event_rule_arn" {
+  description = "ARN of the EventBridge rule"
+  value       = aws_cloudwatch_event_rule.compliance_check_rule.arn
+}
 
-
+output "lambda_function_arn" {
+  description = "ARN of the target Lambda function"
+  value       = aws_lambda_function.bedrock_aws_config_lambda.arn
+}
