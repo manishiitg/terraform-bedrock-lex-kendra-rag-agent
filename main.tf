@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 5.61.0"
     }
   }
 }
@@ -84,11 +84,11 @@ resource "aws_lambda_function" "bedrock_aws_config_lambda" {
 
   environment {
     variables = {
-      KENDRA_INDEX_ID     = aws_kendra_index.kendra_index.id
-      KENDRA_INDEX_NAME   = "${aws_kendra_index.kendra_index.name}-index"
-      EMAIL_FROM    = "saurabh@gmail.com"
-      EMAIL_TO      = "saurabh.excel2011@gmail.com"
-      EMAIL_SUBJECT = "AWS Config Compliance Change Notification"
+      KENDRA_INDEX_ID   = aws_kendra_index.kendra_index.id
+      KENDRA_INDEX_NAME = "${aws_kendra_index.kendra_index.name}-index"
+      EMAIL_FROM        = "saurabh@gmail.com"
+      EMAIL_TO          = "saurabh.excel2011@gmail.com"
+      EMAIL_SUBJECT     = "AWS Config Compliance Change Notification"
     }
   }
 
@@ -210,6 +210,77 @@ resource "aws_cloudwatch_event_target" "lambda_target" {
 EOF
   }
 }
+
+# IAM role for the Bedrock agent
+resource "aws_iam_role" "bedrock_agent_role" {
+  name = "bedrock_agent_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "bedrock.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+
+# AWS Bedrock agent
+resource "aws_bedrockagent_agent" "config_non_compliant_agent" {
+  agent_name  = "ConfigNonCompliantAgent"
+  description = "Agent to handle AWS Config non-compliant events"
+  # role_arn    = aws_iam_role.bedrock_agent_role.arn
+
+  agent_resource_role_arn = aws_iam_role.bedrock_agent_role.arn
+  instruction             = "Monitor AWS Config events for non-compliant resources and integrate with the existing Lambda function."
+  foundation_model        = "anthropic.claude-v2"
+}
+
+# AWS Bedrock agent action group
+resource "aws_bedrockagent_agent_action_group" "config_action_group" {
+  agent_id          = aws_bedrockagent_agent.config_non_compliant_agent.id
+  agent_version     = "DRAFT"
+  action_group_name = "ConfigComplianceActions"
+  description       = "Actions for handling AWS Config compliance events"
+
+  action_group_executor {
+    lambda = aws_lambda_function.bedrock_aws_config_lambda.arn
+  }
+
+  function_schema {
+    member_functions {
+      functions {
+        name        = "HandleNonCompliantResource"
+        description = "Process non-compliant resource and take appropriate action"
+        parameters {
+          map_block_key = "resourceId"
+          type          = "string"
+          description   = "The ID of the non-compliant resource"
+          required      = true
+        }
+        parameters {
+          map_block_key = "complianceType"
+          type          = "string"
+          description   = "The type of non-compliance"
+          required      = true
+        }
+        parameters {
+          map_block_key = "configRuleName"
+          type          = "string"
+          description   = "The name of the Config rule that was violated"
+          required      = true
+        }
+      }
+    }
+  }
+
+}
+
 
 # Lambda permission to allow EventBridge to invoke the function
 resource "aws_lambda_permission" "allow_eventbridge" {

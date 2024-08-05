@@ -169,19 +169,10 @@ def analyze_finding(kendra_id, event):
 
     docs = query_kendra(kendra_id, search_query)
     logger.info('## KENDRA\r' + jsonpickle.encode(docs))
-    system = f"""You are an AWS Security Engineer looking to improve the security posture of your organization
+    system = f"""You are an AWS Security Engineer who has got NON COMPLIANT from Aws Config.
 
-    Generate incident report in below format
+    Generate an email for the incident
     ==========================================
-
-    AnyCompany Incident Response Runbook Template
-    This playbook is provided as a template for AnyCompany Security Team using AWS products and to build our incident response capability. This template is customized to suit AnyCompany's particular needs, risks, available tools and work processes.
-
-    This runbook outlines response steps for security incidents. This runbook is used to –
-    • Gather evidence
-    • Contain and then eradicate the incident
-    • Recover from the incident
-    • Conduct post-incident activities, including post-mortem and feedback processes
 
     Incident Summary
 
@@ -200,9 +191,8 @@ def analyze_finding(kendra_id, event):
     7. Record history and actions
     8. Post activity - perform a root cause analysis, update policies if needed
 
-    This report text will be finally saved in word format, so i need output in markdown format.
+    This report will be sent as an email. 
     Create a detailed report.
-
     """
     user = f"""Review the finding and summarize actionable next steps,
     <finding>
@@ -257,7 +247,7 @@ def lambda_handler(event, context):
 
     result = {
         'statusCode': 200,
-        'response': response,
+        'response': response[0],
         'res': res,
         'email_response': email_response,
     }
