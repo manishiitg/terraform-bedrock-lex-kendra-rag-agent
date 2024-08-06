@@ -164,7 +164,7 @@ resource "aws_cloudwatch_event_rule" "compliance_check_rule" {
     source      = ["aws.config"]
     detail-type = ["Config Rules Compliance Change"]
     detail = {
-      omplianceType = ["COMPLIANT", "NON_COMPLIANT", "NOT_APPLICABLE", "INSUFFICIENT_DATA"]
+      complianceType = ["COMPLIANT", "NON_COMPLIANT", "NOT_APPLICABLE", "INSUFFICIENT_DATA"]
     }
   })
 
